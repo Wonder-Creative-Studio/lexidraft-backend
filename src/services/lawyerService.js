@@ -1,6 +1,6 @@
 import Lawyer from '~/models/Lawyer';
 import Consultation from '~/models/Consultation';
-import { ApiError } from '~/utils/apiError';
+import APIError from '~/utils/apiError';
 import httpStatus from 'http-status';
 import meetingService from '~/services/meetingService';
 import Contract from '~/models/contract';
@@ -10,17 +10,17 @@ import Invoice from '~/models/invoice';
 class LawyerService {
 	async createLawyerProfile(userId, lawyerData) {
 		const lawyer = new Lawyer({
-			user: userId,
-			...lawyerData
+			...lawyerData,
+			userId
 		});
 		return await lawyer.save();
 	}
 
 	async getLawyerProfile(lawyerId) {
-		const lawyer = await Lawyer.findById(lawyerId).populate('user', 'name email').populate('documents');
+		const lawyer = await Lawyer.findById(lawyerId);
 
 		if (!lawyer) {
-			throw new ApiError(httpStatus.NOT_FOUND, 'Lawyer not found');
+			throw new APIError(httpStatus.NOT_FOUND, 'Lawyer not found');
 		}
 		return lawyer;
 	}
@@ -29,7 +29,7 @@ class LawyerService {
 		const lawyer = await Lawyer.findByIdAndUpdate(lawyerId, { $set: updateData }, { new: true, runValidators: true });
 
 		if (!lawyer) {
-			throw new ApiError(httpStatus.NOT_FOUND, 'Lawyer not found');
+			throw new APIError(httpStatus.NOT_FOUND, 'Lawyer not found');
 		}
 		return lawyer;
 	}
@@ -37,8 +37,9 @@ class LawyerService {
 	async searchLawyers(filters = {}) {
 		const query = {};
 
-		if (filters.expertise) {
-			query.expertise = { $in: filters.expertise };
+		if (filters.specialization) {
+			// Changed from expertise to specialization
+			query.specialization = { $in: filters.specialization };
 		}
 
 		if (filters.stateOfPractice) {
@@ -53,74 +54,87 @@ class LawyerService {
 			query.isVerified = true;
 		}
 
-		return await Lawyer.find(query).populate('user', 'name email').sort({ 'rating.average': -1 });
+		return await Lawyer.find(query).sort({ 'rating.average': -1 });
 	}
 
 	async getAvailableSlots(lawyerId, date) {
+		if (!date) {
+			throw new APIError('Date query parameter is required', httpStatus.BAD_REQUEST);
+		}
+
 		const lawyer = await Lawyer.findById(lawyerId);
 		if (!lawyer) {
-			throw new ApiError(httpStatus.NOT_FOUND, 'Lawyer not found');
+			throw new APIError('Lawyer not found', httpStatus.NOT_FOUND);
 		}
 
-		// Get day of week for the given date
-		const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'long' });
-
-		// Find lawyer's availability for that day
+		// Get the day of the week for the given date
+		const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
 		const dayAvailability = lawyer.availability.find((a) => a.day === dayOfWeek);
+
 		if (!dayAvailability) {
-			return [];
+			throw new APIError('No availability found for the given date', httpStatus.NOT_FOUND);
 		}
 
-		// Get existing consultations for that day
+		// Define the start and end of the day
+		const startOfDay = new Date(date);
+		startOfDay.setHours(0, 0, 0, 0);
+
+		const endOfDay = new Date(date);
+		endOfDay.setHours(23, 59, 59, 999);
+
+		// Get existing consultations for the given date
 		const existingConsultations = await Consultation.find({
 			lawyer: lawyerId,
-			scheduledAt: {
-				$gte: new Date(date).setHours(0, 0, 0, 0),
-				$lt: new Date(date).setHours(23, 59, 59, 999)
-			},
+			scheduledAt: { $gte: startOfDay, $lt: endOfDay },
 			status: { $in: ['pending', 'confirmed'] }
 		});
 
 		// Filter out booked slots
-		const bookedSlots = existingConsultations.map((c) => ({
-			start: new Date(c.scheduledAt).toLocaleTimeString('en-US', { hour12: false }),
-			end: new Date(c.scheduledAt.getTime() + c.duration * 60000).toLocaleTimeString('en-US', { hour12: false })
-		}));
-
-		return dayAvailability.slots.filter(
-			(slot) =>
-				!bookedSlots.some(
-					(booked) =>
-						(slot.start >= booked.start && slot.start < booked.end) || (slot.end > booked.start && slot.end <= booked.end)
-				)
+		const bookedSlots = existingConsultations.map((c) => c.slot);
+		const availableSlots = dayAvailability.slots.filter(
+			(slot) => !bookedSlots.some((booked) => booked.startTime === slot.startTime && booked.endTime === slot.endTime)
 		);
+
+		return availableSlots;
 	}
 
 	async createConsultation(userId, lawyerId, consultationData) {
 		const lawyer = await Lawyer.findById(lawyerId);
 		if (!lawyer) {
-			throw new ApiError(httpStatus.NOT_FOUND, 'Lawyer not found');
+			throw new APIError('Lawyer not found', httpStatus.NOT_FOUND);
 		}
 
 		// Verify slot availability
 		const availableSlots = await this.getAvailableSlots(lawyerId, consultationData.scheduledAt);
-		const slotTime = new Date(consultationData.scheduledAt).toLocaleTimeString('en-US', { hour12: false });
 
-		const isSlotAvailable = availableSlots.some((slot) => slot.start <= slotTime && slot.end > slotTime);
+		// Convert consultation time to IST and extract "HH:mm"
+		const scheduledAtIST = new Date(consultationData.scheduledAt).toLocaleString('en-US', {
+			timeZone: 'Asia/Kolkata'
+		});
+		const scheduledTimeStr = new Date(scheduledAtIST).toTimeString().slice(0, 5); // "HH:mm"
+		console.log('Scheduled Time (IST HH:mm):', scheduledTimeStr);
+
+		const isSlotAvailable = availableSlots.some((slot) => {
+			return slot.startTime <= scheduledTimeStr && scheduledTimeStr < slot.endTime;
+		});
 
 		if (!isSlotAvailable) {
-			throw new ApiError(httpStatus.BAD_REQUEST, 'Selected time slot is not available');
+			throw new APIError('Selected time slot is not available', httpStatus.BAD_REQUEST);
 		}
 
-		// Calculate price based on consultation type
-		const price = lawyer.pricing[consultationData.type] * (consultationData.duration / 60);
+		const modeDetails = lawyer.consultationModes.find((m) => m.mode === consultationData.type);
 
+		console.log('Mode Details:', modeDetails);
+		// Calculate price based on consultation type
+		const price = modeDetails.price * (consultationData.duration / 60);
+
+		console.log('Consultation Price:', price);
 		// Create consultation
 		const consultation = new Consultation({
-			user: userId,
 			lawyer: lawyerId,
 			...consultationData,
-			price
+			price,
+			userId
 		});
 
 		// Create meeting if it's a video or chat consultation
@@ -133,21 +147,21 @@ class LawyerService {
 		return await consultation.save();
 	}
 
-	async joinConsultation(consultationId, userId) {
-		const consultation = await Consultation.findById(consultationId).populate('lawyer', 'user').populate('user', 'name');
+	async joinConsultation(consultationId, userIdId) {
+		const consultation = await Consultation.findById(consultationId).populate('lawyer', 'userId').populate('userId', 'name');
 
 		if (!consultation) {
-			throw new ApiError(httpStatus.NOT_FOUND, 'Consultation not found');
+			throw new APIError(httpStatus.NOT_FOUND, 'Consultation not found');
 		}
 
-		// Verify user is either the lawyer or the client
-		if (consultation.user._id.toString() !== userId && consultation.lawyer.user.toString() !== userId) {
-			throw new ApiError(httpStatus.FORBIDDEN, 'Not authorized to join this consultation');
+		// Verify userId is either the lawyer or the client
+		if (consultation.userId._id.toString() !== userIdId && consultation.lawyer.userId.toString() !== userIdId) {
+			throw new APIError(httpStatus.FORBIDDEN, 'Not authorized to join this consultation');
 		}
 
 		// Verify consultation is active
 		if (consultation.status !== 'confirmed') {
-			throw new ApiError(httpStatus.BAD_REQUEST, 'Consultation is not active');
+			throw new APIError(httpStatus.BAD_REQUEST, 'Consultation is not active');
 		}
 
 		// Verify consultation time
@@ -157,14 +171,15 @@ class LawyerService {
 
 		if (timeDiff > 15) {
 			// Allow joining 15 minutes before/after scheduled time
-			throw new ApiError(httpStatus.BAD_REQUEST, 'Consultation is not active at this time');
+			throw new APIError(httpStatus.BAD_REQUEST, 'Consultation is not active at this time');
 		}
 
-		// Get user's name
-		const userName = consultation.user._id.toString() === userId ? consultation.user.name : consultation.lawyer.user.name;
+		// Get userId's name
+		const userIdName =
+			consultation.userId._id.toString() === userIdId ? consultation.userId.name : consultation.lawyer.userId.name;
 
 		// Get meeting details
-		const meetingDetails = await meetingService.joinMeeting(consultation.meetingId, userId, userName);
+		const meetingDetails = await meetingService.joinMeeting(consultation.meetingId, userIdId, userIdName);
 
 		return {
 			consultation,
@@ -172,16 +187,16 @@ class LawyerService {
 		};
 	}
 
-	async endConsultation(consultationId, userId) {
-		const consultation = await Consultation.findById(consultationId).populate('lawyer', 'user');
+	async endConsultation(consultationId, userIdId) {
+		const consultation = await Consultation.findById(consultationId).populate('lawyer', 'userId');
 
 		if (!consultation) {
-			throw new ApiError(httpStatus.NOT_FOUND, 'Consultation not found');
+			throw new APIError(httpStatus.NOT_FOUND, 'Consultation not found');
 		}
 
-		// Verify user is the lawyer
-		if (consultation.lawyer.user.toString() !== userId) {
-			throw new ApiError(httpStatus.FORBIDDEN, 'Only the lawyer can end the consultation');
+		// Verify userId is the lawyer
+		if (consultation.lawyer.userId.toString() !== userIdId) {
+			throw new APIError(httpStatus.FORBIDDEN, 'Only the lawyer can end the consultation');
 		}
 
 		// End the meeting
@@ -198,19 +213,19 @@ class LawyerService {
 		const consultation = await Consultation.findByIdAndUpdate(consultationId, { $set: { status } }, { new: true });
 
 		if (!consultation) {
-			throw new ApiError(httpStatus.NOT_FOUND, 'Consultation not found');
+			throw new APIError(httpStatus.NOT_FOUND, 'Consultation not found');
 		}
 		return consultation;
 	}
 
-	async addFeedback(consultationId, userId, feedbackData) {
+	async addFeedback(consultationId, userIdId, feedbackData) {
 		const consultation = await Consultation.findById(consultationId);
 		if (!consultation) {
-			throw new ApiError(httpStatus.NOT_FOUND, 'Consultation not found');
+			throw new APIError(httpStatus.NOT_FOUND, 'Consultation not found');
 		}
 
-		if (consultation.user.toString() !== userId) {
-			throw new ApiError(httpStatus.FORBIDDEN, 'Not authorized to add feedback');
+		if (consultation.userId.toString() !== userIdId) {
+			throw new APIError(httpStatus.FORBIDDEN, 'Not authorized to add feedback');
 		}
 
 		consultation.feedback = {
@@ -232,15 +247,15 @@ class LawyerService {
 		return await consultation.save();
 	}
 
-	async getConsultationHistory(userId, filters = {}) {
-		return await Consultation.find({ user: userId, ...filters })
-			.populate('lawyer', 'user expertise')
-			.populate('lawyer.user', 'name email')
+	async getConsultationHistory(userIdId, filters = {}) {
+		return await Consultation.find({ userId: userIdId, ...filters })
+			.populate('lawyer', 'userId expertise')
+			.populate('lawyer.userId', 'name email')
 			.sort({ scheduledAt: -1 });
 	}
 
 	async getDashboardStats(lawyerId) {
-		const lawyer = await Lawyer.findOne({ userId: lawyerId });
+		const lawyer = await Lawyer.findOne({ userIdId: lawyerId });
 		if (!lawyer) {
 			throw new Error('Lawyer not found');
 		}
@@ -255,7 +270,7 @@ class LawyerService {
 		const pendingContracts = await Contract.find({
 			lawyerId: lawyer._id,
 			status: 'review'
-		}).populate('userId', 'name email');
+		}).populate('userIdId', 'name email');
 
 		// Get recent earnings
 		const recentEarnings = await Invoice.find({
@@ -275,7 +290,7 @@ class LawyerService {
 	}
 
 	async updateAvailability(lawyerId, availability) {
-		const lawyer = await Lawyer.findOne({ userId: lawyerId });
+		const lawyer = await Lawyer.findOne({ userIdId: lawyerId });
 		if (!lawyer) {
 			throw new Error('Lawyer not found');
 		}
@@ -298,7 +313,7 @@ class LawyerService {
 			.sort({ createdAt: -1 })
 			.skip(skip)
 			.limit(limit)
-			.populate('userId', 'name email');
+			.populate('userIdId', 'name email');
 
 		const total = await Contract.countDocuments(filter);
 
@@ -314,7 +329,7 @@ class LawyerService {
 	}
 
 	async getEarningsReport(lawyerId, startDate, endDate) {
-		const lawyer = await Lawyer.findOne({ userId: lawyerId });
+		const lawyer = await Lawyer.findOne({ userIdId: lawyerId });
 		if (!lawyer) {
 			throw new Error('Lawyer not found');
 		}
@@ -329,10 +344,10 @@ class LawyerService {
 
 		const totalEarnings = invoices.reduce((sum, invoice) => sum + invoice.amount, 0);
 		const pendingAmount = invoices
-			.filter(invoice => invoice.status === 'pending')
+			.filter((invoice) => invoice.status === 'pending')
 			.reduce((sum, invoice) => sum + invoice.amount, 0);
 		const settledAmount = invoices
-			.filter(invoice => invoice.status === 'settled')
+			.filter((invoice) => invoice.status === 'settled')
 			.reduce((sum, invoice) => sum + invoice.amount, 0);
 
 		return {
@@ -344,7 +359,7 @@ class LawyerService {
 	}
 
 	async updateProfile(lawyerId, updateData) {
-		const lawyer = await Lawyer.findOne({ userId: lawyerId });
+		const lawyer = await Lawyer.findOne({ userIdId: lawyerId });
 		if (!lawyer) {
 			throw new Error('Lawyer not found');
 		}

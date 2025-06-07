@@ -1,4 +1,4 @@
-import { ApiError } from '~/utils/apiError';
+import APIError from '~/utils/apiError';
 import httpStatus from 'http-status';
 import zoomService from './zoomService';
 
@@ -9,7 +9,7 @@ class MeetingService {
 			const meeting = await zoomService.createMeeting(consultation);
 			return meeting;
 		} catch (error) {
-			throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Error creating meeting: ' + error.message);
+			throw new APIError('Error creating meeting: ' + error.message, httpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -19,7 +19,7 @@ class MeetingService {
 			const meetingDetails = await zoomService.joinMeeting(meetingId, userId, userName);
 			return meetingDetails;
 		} catch (error) {
-			throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Error joining meeting: ' + error.message);
+			throw new APIError('Error joining meeting: ' + error.message, httpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -29,7 +29,7 @@ class MeetingService {
 			const result = await zoomService.endMeeting(meetingId);
 			return result;
 		} catch (error) {
-			throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Error ending meeting: ' + error.message);
+			throw new APIError('Error ending meeting: ' + error.message, httpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 
@@ -39,7 +39,7 @@ class MeetingService {
 			const status = await zoomService.getMeetingStatus(meetingId);
 			return status;
 		} catch (error) {
-			throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Error getting meeting status: ' + error.message);
+			throw new APIError('Error getting meeting status: ' + error.message, httpStatus.INTERNAL_SERVER_ERROR);
 		}
 	}
 }

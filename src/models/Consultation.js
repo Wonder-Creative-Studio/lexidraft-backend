@@ -3,11 +3,6 @@ import toJSON from './plugins/toJSONPlugin';
 
 const consultationSchema = mongoose.Schema(
 	{
-		user: {
-			type: mongoose.SchemaTypes.ObjectId,
-			ref: 'User',
-			required: true
-		},
 		lawyer: {
 			type: mongoose.SchemaTypes.ObjectId,
 			ref: 'Lawyer',
@@ -90,7 +85,12 @@ const consultationSchema = mongoose.Schema(
 					default: Date.now
 				}
 			}
-		]
+		],
+		userId: {
+			type: mongoose.SchemaTypes.ObjectId,
+			ref: 'User',
+			required: true
+		}
 	},
 	{
 		timestamps: true

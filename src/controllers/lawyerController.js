@@ -1,5 +1,6 @@
 import httpStatus from 'http-status';
 import catchAsync from '~/utils/catchAsync';
+
 import lawyerService from '~/services/lawyerService';
 
 const createLawyerProfile = catchAsync(async (req, res) => {
@@ -23,8 +24,12 @@ const searchLawyers = catchAsync(async (req, res) => {
 });
 
 const getAvailableSlots = catchAsync(async (req, res) => {
-	const slots = await lawyerService.getAvailableSlots(req.params.lawyerId, req.query.date);
-	res.send(slots);
+	const { lawyerId } = req.params;
+	const { date } = req.query;
+
+	const slots = await lawyerService.getAvailableSlots(lawyerId, date);
+
+	res.status(200).json({ slots });
 });
 
 const createConsultation = catchAsync(async (req, res) => {

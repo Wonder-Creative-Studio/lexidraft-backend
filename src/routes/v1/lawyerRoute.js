@@ -8,41 +8,52 @@ import catchAsync from '~/utils/catchAsync';
 const router = Router();
 
 // Lawyer profile routes
-router
-	.route('/')
-	.post(authenticate(), validate(lawyerValidation.createLawyer), catchAsync(lawyerController.createLawyerProfile))
-	.get(authenticate(), validate(lawyerValidation.searchLawyers), catchAsync(lawyerController.searchLawyers));
+router.post('/', authenticate(), validate(lawyerValidation.createLawyer), catchAsync(lawyerController.createLawyerProfile));
+router.get('/', authenticate(), validate(lawyerValidation.searchLawyers), catchAsync(lawyerController.searchLawyers));
 
-router
-	.route('/:lawyerId')
-	.get(authenticate(), catchAsync(lawyerController.getLawyerProfile))
-	.patch(authenticate(), validate(lawyerValidation.updateLawyer), catchAsync(lawyerController.updateLawyerProfile));
+router.get('/:lawyerId', authenticate(), catchAsync(lawyerController.getLawyerProfile));
+router.patch(
+	'/:lawyerId',
+	authenticate(),
+	validate(lawyerValidation.updateLawyer),
+	catchAsync(lawyerController.updateLawyerProfile)
+);
 
 // Availability routes
-router.route('/:lawyerId/slots').get(authenticate(), catchAsync(lawyerController.getAvailableSlots));
+router.get(
+	'/:lawyerId/slots',
+	authenticate(),
+	validate(lawyerValidation.getAvailableSlots), // Use the updated validation
+	catchAsync(lawyerController.getAvailableSlots) // Ensure the controller method is correct
+);
 
 // Consultation routes
-router
-	.route('/:lawyerId/consultations')
-	.post(authenticate(), validate(lawyerValidation.createConsultation), catchAsync(lawyerController.createConsultation));
+router.post(
+	'/:lawyerId/consultations',
+	authenticate(),
+	validate(lawyerValidation.createConsultation),
+	catchAsync(lawyerController.createConsultation)
+);
 
-router
-	.route('/consultations/:consultationId')
-	.patch(
-		authenticate(),
-		validate(lawyerValidation.updateConsultationStatus),
-		catchAsync(lawyerController.updateConsultationStatus)
-	);
+router.patch(
+	'/consultations/:consultationId/status',
+	authenticate(),
+	validate(lawyerValidation.updateConsultationStatus),
+	catchAsync(lawyerController.updateConsultationStatus)
+);
 
-router.route('/consultations/:consultationId/join').post(authenticate(), catchAsync(lawyerController.joinConsultation));
+router.post('/consultations/:consultationId/join', authenticate(), catchAsync(lawyerController.joinConsultation));
 
-router.route('/consultations/:consultationId/end').post(authenticate(), catchAsync(lawyerController.endConsultation));
+router.post('/consultations/:consultationId/end', authenticate(), catchAsync(lawyerController.endConsultation));
 
-router
-	.route('/consultations/:consultationId/feedback')
-	.post(authenticate(), validate(lawyerValidation.addFeedback), catchAsync(lawyerController.addFeedback));
+router.post(
+	'/consultations/:consultationId/feedback',
+	authenticate(),
+	validate(lawyerValidation.addFeedback),
+	catchAsync(lawyerController.addFeedback)
+);
 
-router.route('/consultations').get(authenticate(), catchAsync(lawyerController.getConsultationHistory));
+router.get('/consultations', authenticate(), catchAsync(lawyerController.getConsultationHistory));
 
 // Dashboard routes
 router.get('/dashboard/stats', authenticate(), catchAsync(lawyerController.getDashboardStats));

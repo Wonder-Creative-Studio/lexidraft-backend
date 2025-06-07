@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import config from '~/config/config';
-import app from './app';
+import { app, server as httpServer } from './app';
 import initialData from './config/initialData';
 import logger from './config/logger';
 
@@ -37,17 +37,20 @@ const connect = async () => {
 		logger.info('🚀 Connected to MongoDB end!');
 		await initialData();
 		logger.info('🚀 Initial MongoDB!');
-		server = app.listen(config.PORT, config.HOST, () => {
+
+		// Use the app to create the server
+		server = httpServer.listen(config.PORT, config.HOST, () => {
 			logger.info(`🚀 Host: http://${config.HOST}:${config.PORT}`);
-			logger.info('██████╗░░░██╗██╗███████╗');
-			logger.info('██╔══██╗░██╔╝██║╚════██║');
-			logger.info('██║░░██║██╔╝░██║░░███╔═╝');
-			logger.info('██║░░██║███████║██╔══╝░░');
-			logger.info('██████╔╝╚════██║███████╗');
-			logger.info('╚═════╝░░░░░░╚═╝╚══════╝');
 		});
-	} catch (err) {
-		logger.error(`MongoDB connection error: ${err}`);
+
+		logger.info('██████╗░░░██╗██╗███████╗');
+		logger.info('██╔══██╗░██╔╝██║╚════██║');
+		logger.info('██║░░██║██╔╝░██║░░███╔═╝');
+		logger.info('██║░░██║███████║██╔══╝░░');
+		logger.info('██████╔╝╚════██║███████╗');
+		logger.info('╚═════╝░░░░░░╚═╝╚══════╝');
+	} catch (error) {
+		logger.error(`Error: ${error}`);
 	}
 };
 

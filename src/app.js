@@ -8,6 +8,8 @@ import error from '~/middlewares/error';
 import rateLimiter from '~/middlewares/rateLimiter';
 import config from '~/config/config';
 import morgan from '~/config/morgan';
+import http from 'http';
+import WebSocketService from './services/webSocketService';
 
 const app = express();
 
@@ -28,4 +30,7 @@ app.use(error.converter);
 app.use(error.notFound);
 app.use(error.handler);
 
-export default app;
+const server = http.createServer(app);
+const webSocketService = new WebSocketService(server);
+
+export { app, server, webSocketService };

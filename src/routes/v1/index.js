@@ -9,6 +9,8 @@ import clauseRoute from './clauseRoute';
 import templateRoute from './templateRoute';
 import clientPortalRoute from './clientPortalRoute';
 import legalStampRoute from './legalStampRoute';
+import lawyerRoute from './lawyerRoute';
+import consultationRoute from './consultationRoute';
 
 const router = Router();
 
@@ -18,6 +20,8 @@ router.use('/roles', roleRoute);
 router.use('/images', imageRoute);
 router.use('/lexi', lexiRoute);
 router.use('/contracts', contractRoute);
+router.use('/lawyers', lawyerRoute);
+router.use('/consultations', consultationRoute);
 router.use('/clauses', clauseRoute);
 router.use('/templates', templateRoute);
 router.use('/client-portals', clientPortalRoute);
